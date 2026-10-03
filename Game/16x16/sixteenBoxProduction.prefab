@@ -40,7 +40,16 @@ MonoBehaviour:
   m_GameObject: {fileID: 6050229415239517051}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 26adcdd5d9567b349a92416e8adae99f, type: 3}
+  m_Script: {fileID: 11500000, guid: 5ffbab8453e34fb4ad9134cfa0de69e6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   GameBox: {fileID: 2113028786385919155, guid: 26cfb02fa7964ac449fd999baf5e7b61, type: 3}
+  modeId: 2
+  width: 16
+  height: 16
+  mineCount: 26
+  originX: -2
+  originY: -2
+  stepX: 0.32
+  stepY: 0.32
+  conditionTag: sixteenCondition
