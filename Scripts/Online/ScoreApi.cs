@@ -7,8 +7,9 @@ using UnityEngine.Networking;
 [Serializable]
 public class ScoreEntry
 {
-    public string player_name;
-    public int time_ms;
+    public string name;
+    public string mode;
+    public int time;
 }
 
 [Serializable]
@@ -20,9 +21,9 @@ public class RankingResponse
 [Serializable]
 public class SubmitPayload
 {
-    public string player_name;
-    public int mode;
-    public int time_ms;
+    public string name;
+    public string mode;
+    public int time;
 }
 
 /// <summary>
@@ -42,9 +43,9 @@ public static class ScoreApi
         }
 
         SubmitPayload payload = new SubmitPayload();
-        payload.player_name = playerName;
-        payload.mode = mode;
-        payload.time_ms = timeMs;
+        payload.name = playerName;
+        payload.mode = ToBoardSize(mode).ToString();   // API cần "10", "16" hoặc "30"
+        payload.time = timeMs;
         byte[] body = Encoding.UTF8.GetBytes(JsonUtility.ToJson(payload));
 
         using (UnityWebRequest request = new UnityWebRequest(ApiConfig.SubmitUrl, UnityWebRequest.kHttpVerbPOST))
@@ -75,7 +76,7 @@ public static class ScoreApi
             yield break;
         }
 
-        string url = ApiConfig.RankingUrl + "?mode=" + mode + "&limit=" + ApiConfig.RankingLimit;
+        string url = ApiConfig.RankingUrl(ToBoardSize(mode));
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
@@ -97,6 +98,17 @@ public static class ScoreApi
             }
 
             onDone(true, response.entries, string.Empty);
+        }
+    }
+
+    // Đổi mode nội bộ của game (1/2/3) sang cỡ bàn mà API dùng (10/16/30).
+    private static int ToBoardSize(int mode)
+    {
+        switch (mode)
+        {
+            case 1: return 10;
+            case 2: return 16;
+            default: return 30;
         }
     }
 

@@ -76,8 +76,8 @@ public class RankingMenu : MonoBehaviour
             int shown = Mathf.Min(entries.Length, RowCount);
             for (int i = 0; i < shown; i++)
             {
-                nameTexts[i].text = (i + 1) + ".  " + entries[i].player_name;
-                timeTexts[i].text = TimeFormat.Format(entries[i].time_ms);
+                nameTexts[i].text = (i + 1) + ".  " + entries[i].name;
+                timeTexts[i].text = TimeFormat.Format(entries[i].time);
             }
         }));
     }
