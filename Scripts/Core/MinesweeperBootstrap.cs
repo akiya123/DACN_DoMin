@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 
 /// <summary>
-/// Tự gắn đồng hồ/cửa sổ lưu tên vào scene chơi và nút Ranking vào scene Start,
+/// Tự gắn đồng hồ/cửa sổ lưu tên vào scene chơi và nút Ranking và bánh răng cài đặt vào scene Start,
 /// nên không cần sửa các file .unity. Không cần gắn vào GameObject nào.
 /// </summary>
 public static class MinesweeperBootstrap
@@ -37,6 +37,10 @@ public static class MinesweeperBootstrap
             if (Object.FindObjectOfType<RankingMenu>() == null)
             {
                 RankingMenu.Create();
+            }
+            if (Object.FindObjectOfType<SettingsMenu>() == null)
+            {
+                SettingsMenu.Create();
             }
         }
     }

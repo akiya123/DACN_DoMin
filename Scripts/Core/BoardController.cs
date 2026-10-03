@@ -8,6 +8,9 @@ using UnityEngine.UI;
 /// </summary>
 public class BoardController : MonoBehaviour
 {
+    /// <summary>Số tim ở Easy mode: trúng mìn khi còn tim thì mất 1 tim, hết tim mà trúng mìn mới thua.</summary>
+    public const int EasyModeLives = 3;
+
     [SerializeField] private GameObject GameBox;   // prefab ô (giữ tên field cũ)
 
     [Header("Chế độ chơi")]
@@ -28,11 +31,20 @@ public class BoardController : MonoBehaviour
     public event System.Action FirstReveal;     // lần bấm ô đầu tiên
     public event System.Action GameWon;
     public event System.Action GameLost;
+    public event System.Action LivesChanged;
 
     public bool IsGameOver { get; private set; }
 
+    /// <summary>True nếu trong ván này từng bật Cheat/Easy mode (kể cả đã tắt lại): kết quả không được xếp hạng.</summary>
+    public bool AssistUsed { get; private set; }
+
+    /// <summary>HUD khóa thao tác trên bàn khi đang mở cửa sổ cài đặt.</summary>
+    public bool InputLocked { get; set; }
+
+    public int Lives { get; private set; }
+
     private BoxCell[,] cells;
-    private bool minesPlaced;
+    private bool firstClickDone;
     private int revealedSafe;
     private int safeCellTotal;
     private Text conditionText;
@@ -55,6 +67,13 @@ public class BoardController : MonoBehaviour
             }
         }
 
+        Lives = EasyModeLives;
+        PlaceMines();
+
+        AssistUsed = GameSettings.AnyEnabled;
+        GameSettings.Changed += OnSettingsChanged;
+        ApplyCheatHighlight();
+
         if (!string.IsNullOrEmpty(conditionTag))
         {
             GameObject conditionObject = GameObject.FindGameObjectWithTag(conditionTag);
@@ -65,19 +84,46 @@ public class BoardController : MonoBehaviour
         }
     }
 
+    private void OnDestroy()
+    {
+        GameSettings.Changed -= OnSettingsChanged;
+    }
+
+    private void OnSettingsChanged()
+    {
+        if (GameSettings.AnyEnabled)
+        {
+            AssistUsed = true;   // đã bật một lần thì cả ván không được xếp hạng
+        }
+        ApplyCheatHighlight();
+    }
+
+    private void ApplyCheatHighlight()
+    {
+        bool on = GameSettings.CheatMode && !IsGameOver;
+        foreach (BoxCell c in cells)
+        {
+            c.SetCheatHighlight(on);
+        }
+    }
+
     public void OnCellClicked(BoxCell cell)
     {
-        if (IsGameOver || cell.Revealed) return;
+        if (IsGameOver || InputLocked || cell.Revealed) return;
 
-        if (!minesPlaced)
+        if (!firstClickDone)
         {
-            PlaceMines(cell);
+            firstClickDone = true;
+            if (cell.mine)
+            {
+                RelocateMine(cell);   // ô đầu tiên luôn an toàn
+            }
             if (FirstReveal != null) FirstReveal();
         }
 
         if (cell.mine)
         {
-            Lose();
+            HitMine(cell);
             return;
         }
 
@@ -89,13 +135,13 @@ public class BoardController : MonoBehaviour
         }
     }
 
-    // Đặt mìn sau lần bấm đầu tiên để ô đầu tiên luôn an toàn.
-    private void PlaceMines(BoxCell safeCell)
+    // Mìn được đặt ngay khi sinh bàn (để Cheat mode hiện được mìn từ đầu ván).
+    private void PlaceMines()
     {
         List<BoxCell> candidates = new List<BoxCell>();
         foreach (BoxCell c in cells)
         {
-            if (c != safeCell) candidates.Add(c);
+            candidates.Add(c);
         }
 
         int count = Mathf.Min(mineCount, candidates.Count);
@@ -109,7 +155,28 @@ public class BoardController : MonoBehaviour
         }
 
         safeCellTotal = width * height - count;
+        ComputeAdjacency();
+    }
 
+    // Dời mìn ở ô vừa bấm sang một ô trống ngẫu nhiên khác.
+    private void RelocateMine(BoxCell clicked)
+    {
+        List<BoxCell> free = new List<BoxCell>();
+        foreach (BoxCell c in cells)
+        {
+            if (!c.mine) free.Add(c);
+        }
+        if (free.Count == 0) return;
+
+        BoxCell target = free[UnityEngine.Random.Range(0, free.Count)];
+        clicked.mine = false;
+        target.mine = true;
+        ComputeAdjacency();
+        ApplyCheatHighlight();
+    }
+
+    private void ComputeAdjacency()
+    {
         for (int x = 0; x < width; x++)
         {
             for (int y = 0; y < height; y++)
@@ -117,8 +184,6 @@ public class BoardController : MonoBehaviour
                 cells[x, y].adjacentMines = CountAdjacentMines(x, y);
             }
         }
-
-        minesPlaced = true;
     }
 
     private int CountAdjacentMines(int x, int y)
@@ -169,6 +234,18 @@ public class BoardController : MonoBehaviour
                 }
             }
         }
+    }
+
+    private void HitMine(BoxCell cell)
+    {
+        if (GameSettings.EasyMode && Lives > 0)
+        {
+            Lives--;
+            cell.Reveal();   // ô mìn đã nổ vẫn hiện ra nhưng không tính là ô an toàn
+            if (LivesChanged != null) LivesChanged();
+            return;
+        }
+        Lose();
     }
 
     private void Win()

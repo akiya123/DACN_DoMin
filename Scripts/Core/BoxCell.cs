@@ -6,6 +6,8 @@ using UnityEngine;
 /// </summary>
 public class BoxCell : MonoBehaviour
 {
+    private static readonly Color CheatColor = new Color(1f, 0.35f, 0.35f);
+
     public bool mine;
     public Sprite[] emptyBoxElement;   // 9 sprite: 0..8 mìn xung quanh
     public Sprite mineElement;
@@ -18,6 +20,7 @@ public class BoxCell : MonoBehaviour
 
     private BoardController board;
     private SpriteRenderer spriteRenderer;
+    private Color baseColor;
 
     public void Init(BoardController owner, int x, int y)
     {
@@ -25,19 +28,27 @@ public class BoxCell : MonoBehaviour
         X = x;
         Y = y;
         spriteRenderer = GetComponent<SpriteRenderer>();
+        baseColor = spriteRenderer.color;
     }
 
     public void Reveal()
     {
         Revealed = true;
+        spriteRenderer.color = baseColor;
         spriteRenderer.sprite = mine ? mineElement : emptyBoxElement[adjacentMines];
+    }
+
+    /// <summary>Cheat mode: tô đỏ các ô có mìn chưa mở.</summary>
+    public void SetCheatHighlight(bool on)
+    {
+        if (Revealed) return;
+        spriteRenderer.color = (on && mine) ? CheatColor : baseColor;
     }
 
     private void OnMouseUpAsButton()
     {
-        if (board != null)
-        {
-            board.OnCellClicked(this);
-        }
+        if (board == null) return;
+        if (HudBlocker.IsPointerOver()) return;   // click vào nút/cửa sổ của HUD đang nằm đè lên ô
+        board.OnCellClicked(this);
     }
 }

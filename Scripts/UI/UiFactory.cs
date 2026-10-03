@@ -7,11 +7,59 @@ using UnityEngine.UI;
 /// </summary>
 public static class UiFactory
 {
+    public static readonly Vector2 TopLeft = new Vector2(0f, 1f);
     public static readonly Vector2 TopCenter = new Vector2(0.5f, 1f);
     public static readonly Vector2 TopRight = new Vector2(1f, 1f);
     public static readonly Vector2 Center = new Vector2(0.5f, 0.5f);
 
     private static Font font;
+    private static Sprite gearSprite;
+
+    // Bánh răng vẽ bằng code (không cần file ảnh, không phụ thuộc font ký hiệu).
+    public static Sprite GearSprite
+    {
+        get
+        {
+            if (gearSprite == null)
+            {
+                gearSprite = BuildGearSprite(128);
+            }
+            return gearSprite;
+        }
+    }
+
+    private static Sprite BuildGearSprite(int size)
+    {
+        const int teeth = 8;
+        float center = (size - 1) * 0.5f;
+        float outer = size * 0.46f;   // bán kính đỉnh răng
+        float root = size * 0.36f;    // bán kính chân răng
+        float hole = size * 0.16f;    // bán kính lỗ giữa
+
+        Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        texture.filterMode = FilterMode.Bilinear;
+        texture.wrapMode = TextureWrapMode.Clamp;
+
+        Color[] pixels = new Color[size * size];
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = x - center;
+                float dy = y - center;
+                float r = Mathf.Sqrt(dx * dx + dy * dy);
+                float angle = Mathf.Atan2(dy, dx);
+                float wave = Mathf.Clamp01(Mathf.Sin(angle * teeth) * 2.5f + 0.5f);
+                float edge = Mathf.Lerp(root, outer, wave);
+                float alpha = Mathf.Clamp01(edge - r + 0.5f) * Mathf.Clamp01(r - hole + 0.5f);
+                pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
+            }
+        }
+        texture.SetPixels(pixels);
+        texture.Apply();
+
+        return Sprite.Create(texture, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f));
+    }
 
     // Dùng font hệ thống (Arial trên Windows) để hiển thị được tiếng Việt có dấu.
     public static Font DefaultFont

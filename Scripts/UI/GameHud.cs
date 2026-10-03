@@ -1,8 +1,9 @@
+using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Đồng hồ hh:mm:ss.mmm trong game và cửa sổ lưu tên khi thắng.
+/// Đồng hồ hh:mm:ss.mmm, hiển thị tim ở Easy mode và cửa sổ lưu tên khi thắng.
 /// Được MinesweeperBootstrap tự tạo ở mỗi scene có BoardController.
 /// </summary>
 public class GameHud : MonoBehaviour
@@ -17,15 +18,19 @@ public class GameHud : MonoBehaviour
     private static readonly Color CloseButtonColor = new Color(0.4f, 0.4f, 0.45f);
     private static readonly Color ErrorColor = new Color(1f, 0.5f, 0.5f);
     private static readonly Color OkColor = new Color(0.6f, 1f, 0.6f);
+    private static readonly Color WarnColor = new Color(1f, 0.85f, 0.4f);
 
     private BoardController board;
     private readonly System.Diagnostics.Stopwatch stopwatch = new System.Diagnostics.Stopwatch();
 
     private Text timerText;
+    private Text heartsText;
+
     private GameObject winPanel;
     private Text winTimeText;
     private InputField nameInput;
     private Button saveButton;
+    private Button winCloseButton;
     private Text statusText;
 
     private long finalMilliseconds;
@@ -45,6 +50,10 @@ public class GameHud : MonoBehaviour
         board.FirstReveal += OnFirstReveal;
         board.GameWon += OnWon;
         board.GameLost += OnLost;
+        board.LivesChanged += RefreshHearts;
+        GameSettings.Changed += OnSettingsChanged;
+
+        RefreshHearts();
 
         if (!StartTimerOnFirstClick)
         {
@@ -54,11 +63,13 @@ public class GameHud : MonoBehaviour
 
     private void OnDestroy()
     {
+        GameSettings.Changed -= OnSettingsChanged;
         if (board != null)
         {
             board.FirstReveal -= OnFirstReveal;
             board.GameWon -= OnWon;
             board.GameLost -= OnLost;
+            board.LivesChanged -= RefreshHearts;
         }
     }
 
@@ -69,6 +80,8 @@ public class GameHud : MonoBehaviour
             timerText.text = TimeFormat.Format(stopwatch.ElapsedMilliseconds);
         }
     }
+
+    // ---------- Sự kiện game ----------
 
     private void OnFirstReveal()
     {
@@ -90,21 +103,43 @@ public class GameHud : MonoBehaviour
         stopwatch.Stop();
         finalMilliseconds = stopwatch.ElapsedMilliseconds;
         timerText.text = TimeFormat.Format(finalMilliseconds);
-
         winTimeText.text = "Thời gian: " + TimeFormat.Format(finalMilliseconds);
+
+        // Có dùng Cheat/Easy mode trong ván này thì không cho lưu điểm.
+        bool ranked = !board.AssistUsed;
+        nameInput.gameObject.SetActive(ranked);
+        saveButton.gameObject.SetActive(ranked);
+        UiFactory.Place(winCloseButton.GetComponent<RectTransform>(), UiFactory.TopCenter, UiFactory.TopCenter,
+            new Vector2(ranked ? 150f : 0f, -390f), new Vector2(250f, 72f));
+
+        saved = false;
         nameInput.text = string.Empty;
         nameInput.interactable = true;
         saveButton.interactable = true;
-        saved = false;
-        SetStatus(string.Empty, Color.white);
+
+        if (ranked)
+        {
+            SetStatus(string.Empty, Color.white);
+        }
+        else
+        {
+            SetStatus("Bạn đã dùng chế độ hỗ trợ (Cheat/Easy) nên kết quả không được tính vào bảng xếp hạng.", WarnColor);
+        }
 
         winPanel.SetActive(true);
-        nameInput.ActivateInputField();
+        if (ranked) nameInput.ActivateInputField();
     }
+
+    private void OnSettingsChanged()
+    {
+        RefreshHearts();
+    }
+
+    // ---------- Cửa sổ lưu tên ----------
 
     private void OnSaveClicked()
     {
-        if (saved) return;
+        if (saved || board.AssistUsed) return;
 
         string playerName = nameInput.text.Trim();
         if (playerName.Length == 0)
@@ -135,7 +170,7 @@ public class GameHud : MonoBehaviour
         }
     }
 
-    private void OnCloseClicked()
+    private void OnWinCloseClicked()
     {
         winPanel.SetActive(false);
     }
@@ -146,20 +181,53 @@ public class GameHud : MonoBehaviour
         statusText.color = color;
     }
 
+    // ---------- Tim (Easy mode) ----------
+
+    private void RefreshHearts()
+    {
+        heartsText.gameObject.SetActive(GameSettings.EasyMode);
+
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < BoardController.EasyModeLives; i++)
+        {
+            if (i > 0) builder.Append(' ');
+            builder.Append(i < board.Lives ? "<color=#ff4d4d>\u2665</color>" : "<color=#555555>\u2665</color>");
+        }
+        heartsText.text = builder.ToString();
+    }
+
+    // ---------- Dựng giao diện ----------
+
     private void BuildUi()
     {
         Canvas canvas = UiFactory.CreateCanvas("HudCanvas", 100);
         canvas.transform.SetParent(transform, false);
 
-        // Đồng hồ ở giữa phía trên màn hình.
-        Image timerBackground = UiFactory.CreateImage(canvas.transform, "TimerBackground", new Color(0f, 0f, 0f, 0.55f));
-        UiFactory.Place(timerBackground.rectTransform, UiFactory.TopCenter, UiFactory.TopCenter, new Vector2(0f, -20f), new Vector2(380f, 80f));
-        timerText = UiFactory.CreateText(timerBackground.transform, "TimerText", TimeFormat.Format(0), 46, TextAnchor.MiddleCenter, Color.white);
-        UiFactory.Stretch(timerText.rectTransform, 4f);
+        BuildTimer(canvas.transform);
+        BuildHearts(canvas.transform);
+        BuildWinPanel(canvas.transform);   // dựng sau cùng để nằm trên cùng
+    }
 
-        // Cửa sổ khi thắng: lớp phủ tối + hộp thoại.
-        Image overlay = UiFactory.CreateImage(canvas.transform, "WinOverlay", new Color(0f, 0f, 0f, 0.6f));
+    private void BuildTimer(Transform parent)
+    {
+        Image background = UiFactory.CreateImage(parent, "TimerBackground", new Color(0f, 0f, 0f, 0.55f));
+        background.raycastTarget = false;
+        UiFactory.Place(background.rectTransform, UiFactory.TopCenter, UiFactory.TopCenter, new Vector2(0f, -20f), new Vector2(380f, 80f));
+        timerText = UiFactory.CreateText(background.transform, "TimerText", TimeFormat.Format(0), 46, TextAnchor.MiddleCenter, Color.white);
+        UiFactory.Stretch(timerText.rectTransform, 4f);
+    }
+
+    private void BuildHearts(Transform parent)
+    {
+        heartsText = UiFactory.CreateText(parent, "HeartsText", string.Empty, 56, TextAnchor.MiddleCenter, Color.white);
+        UiFactory.Place(heartsText.rectTransform, UiFactory.TopCenter, UiFactory.TopCenter, new Vector2(0f, -105f), new Vector2(380f, 70f));
+    }
+
+    private void BuildWinPanel(Transform parent)
+    {
+        Image overlay = UiFactory.CreateImage(parent, "WinOverlay", new Color(0f, 0f, 0f, 0.6f));
         UiFactory.Stretch(overlay.rectTransform, 0f);
+        overlay.gameObject.AddComponent<HudBlocker>();
         winPanel = overlay.gameObject;
 
         Image box = UiFactory.CreateImage(overlay.transform, "WinBox", PanelColor);
@@ -181,9 +249,9 @@ public class GameHud : MonoBehaviour
         UiFactory.Place(saveButton.GetComponent<RectTransform>(), UiFactory.TopCenter, UiFactory.TopCenter, new Vector2(-150f, -390f), new Vector2(250f, 72f));
         saveButton.onClick.AddListener(OnSaveClicked);
 
-        Button closeButton = UiFactory.CreateButton(box.transform, "CloseButton", "Đóng", CloseButtonColor);
-        UiFactory.Place(closeButton.GetComponent<RectTransform>(), UiFactory.TopCenter, UiFactory.TopCenter, new Vector2(150f, -390f), new Vector2(250f, 72f));
-        closeButton.onClick.AddListener(OnCloseClicked);
+        winCloseButton = UiFactory.CreateButton(box.transform, "CloseButton", "Đóng", CloseButtonColor);
+        UiFactory.Place(winCloseButton.GetComponent<RectTransform>(), UiFactory.TopCenter, UiFactory.TopCenter, new Vector2(150f, -390f), new Vector2(250f, 72f));
+        winCloseButton.onClick.AddListener(OnWinCloseClicked);
 
         winPanel.SetActive(false);
     }
