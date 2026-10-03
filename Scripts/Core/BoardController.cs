@@ -109,7 +109,7 @@ public class BoardController : MonoBehaviour
 
     public void OnCellClicked(BoxCell cell)
     {
-        if (IsGameOver || InputLocked || cell.Revealed) return;
+        if (IsGameOver || InputLocked || cell.Revealed || cell.Flagged) return;   // ô đã cắm cờ thì không mở nhầm
 
         if (!firstClickDone)
         {
@@ -133,6 +133,12 @@ public class BoardController : MonoBehaviour
         {
             Win();
         }
+    }
+
+    public void OnCellFlagClicked(BoxCell cell)
+    {
+        if (IsGameOver || InputLocked || cell.Revealed) return;
+        cell.ToggleFlag();
     }
 
     // Mìn được đặt ngay khi sinh bàn (để Cheat mode hiện được mìn từ đầu ván).
@@ -226,7 +232,7 @@ public class BoardController : MonoBehaviour
                     if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
 
                     BoxCell neighbour = cells[nx, ny];
-                    if (neighbour.Revealed || neighbour.mine) continue;
+                    if (neighbour.Revealed || neighbour.mine || neighbour.Flagged) continue;   // không tự mở ô đã cắm cờ
 
                     neighbour.Reveal();
                     revealedSafe++;
