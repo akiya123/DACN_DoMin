@@ -1,5 +1,13 @@
 using UnityEngine;
 
+/// <summary>Dấu hiệu hiển thị trên ô đã mở ở Easy mode.</summary>
+public enum CellMark
+{
+    None,       // hiện con số như bình thường
+    Question,   // ô "?": đã mở nhưng ẩn con số
+    Heart       // ô tim: đã mở, hồi 1 mạng
+}
+
 /// <summary>
 /// Một ô trên bàn dò mìn. Thay thế boxScript / sixteenBoxScript / thirtyBoxScript.
 /// Các field public giữ nguyên tên cũ để prefab không bị mất tham chiếu sprite.
@@ -9,6 +17,7 @@ public class BoxCell : MonoBehaviour
 {
     private static readonly Color CheatColor = new Color(1f, 0.35f, 0.35f);
     private const float FlagScale = 0.8f;   // cờ chiếm 80% kích thước ô
+    private const float MarkScale = 0.75f;  // dấu "?" / tim chiếm 75% kích thước ô
 
     public bool mine;
     public Sprite[] emptyBoxElement;   // 9 sprite: 0..8 mìn xung quanh
@@ -17,13 +26,16 @@ public class BoxCell : MonoBehaviour
     [System.NonSerialized] public int X;
     [System.NonSerialized] public int Y;
     [System.NonSerialized] public int adjacentMines;
+    [System.NonSerialized] public bool heart;   // ô tim (Easy mode): ô an toàn đặc biệt, không mở lan
 
     public bool Revealed { get; private set; }
     public bool Flagged { get; private set; }
+    public CellMark Mark { get; private set; }
 
     private BoardController board;
     private SpriteRenderer spriteRenderer;
-    private SpriteRenderer flagRenderer;   // tạo khi cắm cờ lần đầu để không tốn 900 object lúc khởi động
+    private SpriteRenderer flagRenderer;   // các lớp phủ được tạo khi cần để không tốn hàng trăm object lúc khởi động
+    private SpriteRenderer markRenderer;
     private Color baseColor;
 
     public void Init(BoardController owner, int x, int y)
@@ -35,12 +47,34 @@ public class BoxCell : MonoBehaviour
         baseColor = spriteRenderer.color;
     }
 
-    public void Reveal()
+    /// <summary>Mở ô. Ô mìn luôn hiện mìn; ô khác hiện con số, hoặc "?" / tim nếu có dấu hiệu.</summary>
+    public void Reveal(CellMark mark = CellMark.None)
     {
         SetFlag(false);   // mở ô thì cờ biến mất
         Revealed = true;
         spriteRenderer.color = baseColor;
-        spriteRenderer.sprite = mine ? mineElement : emptyBoxElement[adjacentMines];
+
+        if (mine)
+        {
+            Mark = CellMark.None;
+            spriteRenderer.sprite = mineElement;
+            return;
+        }
+
+        Mark = mark;
+        if (mark == CellMark.None)
+        {
+            spriteRenderer.sprite = emptyBoxElement[adjacentMines];
+            return;
+        }
+
+        spriteRenderer.sprite = emptyBoxElement[0];   // nền ô đã mở, không số
+        if (markRenderer == null)
+        {
+            markRenderer = CreateOverlay("Mark", MarkScale);
+        }
+        markRenderer.sprite = (mark == CellMark.Heart) ? MarkArt.Heart : MarkArt.Question;
+        markRenderer.gameObject.SetActive(true);
     }
 
     public void ToggleFlag()
@@ -54,7 +88,8 @@ public class BoxCell : MonoBehaviour
         Flagged = on;
         if (on && flagRenderer == null)
         {
-            CreateFlagRenderer();
+            flagRenderer = CreateOverlay("Flag", FlagScale);
+            flagRenderer.sprite = FlagArt.Sprite;
         }
         if (flagRenderer != null)
         {
@@ -62,22 +97,22 @@ public class BoxCell : MonoBehaviour
         }
     }
 
-    private void CreateFlagRenderer()
+    // Tạo sprite con nằm giữa ô, nằm trên sprite của ô, co theo kích thước ô (đơn vị cục bộ).
+    private SpriteRenderer CreateOverlay(string objectName, float scale)
     {
-        GameObject flag = new GameObject("Flag");
-        flag.transform.SetParent(transform, false);
+        GameObject overlay = new GameObject(objectName);
+        overlay.transform.SetParent(transform, false);
 
-        flagRenderer = flag.AddComponent<SpriteRenderer>();
-        flagRenderer.sprite = FlagArt.Sprite;
-        flagRenderer.sortingLayerID = spriteRenderer.sortingLayerID;
-        flagRenderer.sortingOrder = spriteRenderer.sortingOrder + 1;
+        SpriteRenderer renderer = overlay.AddComponent<SpriteRenderer>();
+        renderer.sortingLayerID = spriteRenderer.sortingLayerID;
+        renderer.sortingOrder = spriteRenderer.sortingOrder + 1;
 
-        // Đặt cờ giữa ô và co theo kích thước sprite của ô (đơn vị cục bộ của ô).
         Sprite cover = spriteRenderer.sprite;
         Vector3 size = cover != null ? cover.bounds.size : Vector3.one;
         Vector3 center = cover != null ? cover.bounds.center : Vector3.zero;
-        flag.transform.localPosition = center;
-        flag.transform.localScale = new Vector3(size.x * FlagScale, size.y * FlagScale, 1f);
+        overlay.transform.localPosition = center;
+        overlay.transform.localScale = new Vector3(size.x * scale, size.y * scale, 1f);
+        return renderer;
     }
 
     /// <summary>Cheat mode: tô đỏ các ô có mìn chưa mở.</summary>

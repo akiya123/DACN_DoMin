@@ -185,7 +185,7 @@ public class GameHud : MonoBehaviour
 
     private void RefreshHearts()
     {
-        heartsText.gameObject.SetActive(GameSettings.EasyMode);
+        heartsText.gameObject.SetActive(board.EasyActive);
 
         StringBuilder builder = new StringBuilder();
         for (int i = 0; i < BoardController.EasyModeLives; i++)

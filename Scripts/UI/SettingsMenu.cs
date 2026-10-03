@@ -92,7 +92,7 @@ public class SettingsMenu : MonoBehaviour
 
         cheatToggle = BuildToggleRow(box.transform, "Cheat mode", "Hiện tất cả mìn trên bàn", -120f, ToggleCheat);
         easyToggle = BuildToggleRow(box.transform, "Easy mode",
-            "Thêm " + BoardController.EasyModeLives + " tim, trúng mìn mất 1 tim thay vì thua", -235f, ToggleEasy);
+            BoardController.EasyModeLives + " mạng, có ô tim (hồi mạng) và ô ? (ẩn số)", -235f, ToggleEasy);
 
         Text note = UiFactory.CreateText(box.transform, "Note",
             "Cài đặt áp dụng cho các ván chơi sau. Bật bất kỳ chế độ nào thì kết quả ván chơi sẽ không được tính vào bảng xếp hạng.",

@@ -5,11 +5,18 @@ using UnityEngine.UI;
 /// <summary>
 /// Sinh bàn chơi và xử lý luật dò mìn. Thay thế boxproduction / sixteenBoxProduction / thirtyBoxProduction.
 /// Mỗi scene (10x10, 16x16, 30x30) dùng cùng script này, chỉ khác các tham số trong Inspector.
+///
+/// Easy mode: người chơi có EasyModeLives mạng (trúng mìn mất 1 mạng, hết mạng thì thua).
+/// Bàn có thêm ô tim (HeartChance mỗi ô không phải mìn) giúp hồi 1 mạng, và các ô số 1-8 có thể
+/// bị ẩn số thành ô "?" với tỉ lệ phụ thuộc số mạng đang còn.
 /// </summary>
 public class BoardController : MonoBehaviour
 {
-    /// <summary>Số tim ở Easy mode: trúng mìn khi còn tim thì mất 1 tim, hết tim mà trúng mìn mới thua.</summary>
+    /// <summary>Số mạng ở Easy mode, cũng là số mạng tối đa.</summary>
     public const int EasyModeLives = 3;
+
+    /// <summary>Xác suất một ô không phải mìn trở thành ô tim.</summary>
+    public const float HeartChance = 0.03f;
 
     [SerializeField] private GameObject GameBox;   // prefab ô (giữ tên field cũ)
 
@@ -35,10 +42,13 @@ public class BoardController : MonoBehaviour
 
     public bool IsGameOver { get; private set; }
 
+    /// <summary>Easy mode có hiệu lực trong ván này (chốt lúc vào scene).</summary>
+    public bool EasyActive { get; private set; }
+
     /// <summary>True nếu trong ván này từng bật Cheat/Easy mode (kể cả đã tắt lại): kết quả không được xếp hạng.</summary>
     public bool AssistUsed { get; private set; }
 
-    /// <summary>HUD khóa thao tác trên bàn khi đang mở cửa sổ cài đặt.</summary>
+    /// <summary>HUD khóa thao tác trên bàn khi cần.</summary>
     public bool InputLocked { get; set; }
 
     public int Lives { get; private set; }
@@ -48,6 +58,14 @@ public class BoardController : MonoBehaviour
     private int revealedSafe;
     private int safeCellTotal;
     private Text conditionText;
+
+    /// <summary>Xác suất một ô số 1-8 bị ẩn thành "?" theo số mạng đang còn: 3 → 30%, 2 → 15%, 1 → 0,5%.</summary>
+    public static float QuestionChanceFor(int lives)
+    {
+        if (lives >= 3) return 0.30f;
+        if (lives == 2) return 0.15f;
+        return 0.005f;
+    }
 
     private void Awake()
     {
@@ -62,13 +80,19 @@ public class BoardController : MonoBehaviour
                 GameObject go = Instantiate(GameBox, position, Quaternion.identity, container);
                 BoxCell cell = go.GetComponent<BoxCell>();
                 cell.mine = false;
+                cell.heart = false;
                 cell.Init(this, x, y);
                 cells[x, y] = cell;
             }
         }
 
+        EasyActive = GameSettings.EasyMode;
         Lives = EasyModeLives;
         PlaceMines();
+        if (EasyActive)
+        {
+            PlaceHearts();
+        }
 
         AssistUsed = GameSettings.AnyEnabled;
         GameSettings.Changed += OnSettingsChanged;
@@ -111,12 +135,15 @@ public class BoardController : MonoBehaviour
     {
         if (IsGameOver || InputLocked || cell.Revealed || cell.Flagged) return;   // ô đã cắm cờ thì không mở nhầm
 
+        // Tỉ lệ "?" lấy theo số mạng tại thời điểm bấm.
+        float questionChance = QuestionChanceFor(Lives);
+
         if (!firstClickDone)
         {
             firstClickDone = true;
             if (cell.mine)
             {
-                RelocateMine(cell);   // ô đầu tiên luôn an toàn
+                RelocateMine(cell);   // ô đầu tiên không bao giờ là mìn (có thể là tim hoặc "?")
             }
             if (FirstReveal != null) FirstReveal();
         }
@@ -127,7 +154,14 @@ public class BoardController : MonoBehaviour
             return;
         }
 
-        FloodReveal(cell);
+        if (cell.heart)
+        {
+            RevealHeart(cell);   // ô tim không mở lan
+        }
+        else
+        {
+            FloodReveal(cell, questionChance);
+        }
 
         if (revealedSafe >= safeCellTotal)
         {
@@ -164,23 +198,45 @@ public class BoardController : MonoBehaviour
         ComputeAdjacency();
     }
 
-    // Dời mìn ở ô vừa bấm sang một ô trống ngẫu nhiên khác.
+    // Sau khi đã đặt mìn: mỗi ô không phải mìn có HeartChance trở thành ô tim.
+    private void PlaceHearts()
+    {
+        foreach (BoxCell c in cells)
+        {
+            if (!c.mine && UnityEngine.Random.value < HeartChance)
+            {
+                c.heart = true;
+            }
+        }
+    }
+
+    // Dời mìn ở ô vừa bấm sang một ô an toàn khác (ưu tiên ô không phải tim).
     private void RelocateMine(BoxCell clicked)
     {
         List<BoxCell> free = new List<BoxCell>();
         foreach (BoxCell c in cells)
         {
-            if (!c.mine) free.Add(c);
+            if (!c.mine && !c.heart) free.Add(c);
+        }
+        if (free.Count == 0)
+        {
+            // Hầu như không xảy ra: mọi ô còn lại đều là tim. Chấp nhận lấy một ô tim làm chỗ đặt mìn.
+            foreach (BoxCell c in cells)
+            {
+                if (!c.mine) free.Add(c);
+            }
         }
         if (free.Count == 0) return;
 
         BoxCell target = free[UnityEngine.Random.Range(0, free.Count)];
         clicked.mine = false;
         target.mine = true;
+        target.heart = false;
         ComputeAdjacency();
         ApplyCheatHighlight();
     }
 
+    // Con số chỉ đếm mìn; ô tim không được tính.
     private void ComputeAdjacency()
     {
         for (int x = 0; x < width; x++)
@@ -209,12 +265,23 @@ public class BoardController : MonoBehaviour
         return count;
     }
 
-    // Mở ô bằng hàng đợi, chỉ lan tiếp từ ô có 0 mìn xung quanh.
-    private void FloodReveal(BoxCell start)
+    // Mở một ô an toàn (không phải tim). Ô số 1-8 có thể thành "?" ở Easy mode.
+    private void RevealSafeCell(BoxCell cell, float questionChance)
+    {
+        CellMark mark = CellMark.None;
+        if (EasyActive && cell.adjacentMines > 0 && UnityEngine.Random.value < questionChance)
+        {
+            mark = CellMark.Question;
+        }
+        cell.Reveal(mark);
+        revealedSafe++;
+    }
+
+    // Mở ô bằng hàng đợi, chỉ lan tiếp từ ô có 0 mìn xung quanh. Không tự mở ô mìn, ô cắm cờ và ô tim.
+    private void FloodReveal(BoxCell start, float questionChance)
     {
         Queue<BoxCell> queue = new Queue<BoxCell>();
-        start.Reveal();
-        revealedSafe++;
+        RevealSafeCell(start, questionChance);
         queue.Enqueue(start);
 
         while (queue.Count > 0)
@@ -232,26 +299,45 @@ public class BoardController : MonoBehaviour
                     if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
 
                     BoxCell neighbour = cells[nx, ny];
-                    if (neighbour.Revealed || neighbour.mine || neighbour.Flagged) continue;   // không tự mở ô đã cắm cờ
+                    if (neighbour.Revealed || neighbour.mine || neighbour.Flagged || neighbour.heart) continue;
 
-                    neighbour.Reveal();
-                    revealedSafe++;
+                    RevealSafeCell(neighbour, questionChance);
                     queue.Enqueue(neighbour);
                 }
             }
         }
     }
 
+    // Ô tim: tính là ô an toàn đã mở, hồi 1 mạng (không vượt mức tối đa).
+    private void RevealHeart(BoxCell cell)
+    {
+        cell.Reveal(CellMark.Heart);
+        revealedSafe++;
+
+        if (Lives < EasyModeLives)
+        {
+            Lives++;
+            if (LivesChanged != null) LivesChanged();
+        }
+    }
+
     private void HitMine(BoxCell cell)
     {
-        if (GameSettings.EasyMode && Lives > 0)
+        if (!EasyActive)
         {
-            Lives--;
-            cell.Reveal();   // ô mìn đã nổ vẫn hiện ra nhưng không tính là ô an toàn
-            if (LivesChanged != null) LivesChanged();
+            Lose();
             return;
         }
-        Lose();
+
+        Lives--;
+        if (LivesChanged != null) LivesChanged();
+
+        if (Lives <= 0)
+        {
+            Lose();
+            return;
+        }
+        cell.Reveal();   // ô mìn đã nổ vẫn hiện ra nhưng không tính là ô an toàn
     }
 
     private void Win()
