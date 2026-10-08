@@ -16,7 +16,7 @@ public class BoardController : MonoBehaviour
     public const int EasyModeLives = 3;
 
     /// <summary>Xác suất một ô không phải mìn trở thành ô tim.</summary>
-    public const float HeartChance = 0.03f;
+    public const float HeartChance = 0.02f;
 
     [SerializeField] private GameObject GameBox;   // prefab ô (giữ tên field cũ)
 
@@ -62,8 +62,8 @@ public class BoardController : MonoBehaviour
     /// <summary>Xác suất một ô số 1-8 bị ẩn thành "?" theo số mạng đang còn: 3 → 30%, 2 → 15%, 1 → 0,5%.</summary>
     public static float QuestionChanceFor(int lives)
     {
-        if (lives >= 3) return 0.30f;
-        if (lives == 2) return 0.15f;
+        if (lives >= 3) return 0.07f;
+        if (lives == 2) return 0.04f;
         return 0.005f;
     }
 
